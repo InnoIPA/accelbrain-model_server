@@ -60,7 +60,7 @@ jobs:
             CGO_CFLAGS
             CGO_CXXFLAGS
             GOFLAGS
-          outputs: |
+          outputs: >-
             type=image,
             name=${{ env.IMAGE_NAME }},
             push-by-digest=true,

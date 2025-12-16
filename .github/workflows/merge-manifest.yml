@@ -80,4 +80,4 @@ jobs:
           workflow_file_name: update-latest.yml
           client_payload: |
             { "tag": "${{ env.TAG }}" }
-          wait: false
+          wait_workflow: false

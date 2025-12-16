@@ -69,7 +69,6 @@ jobs:
           ref: v${{ steps.get_version.outputs.version }}
           client_payload: '{}'
           wait_interval: 10
-          timeout_seconds: 3600
 
       - name: Trigger merge manifest workflow
         if: steps.docker_build_amd64.outputs.conclusion == 'success'
@@ -83,7 +82,7 @@ jobs:
           ref: v${{ steps.get_version.outputs.version }}
           client_payload: |
             { "tag": "v${{ steps.get_version.outputs.version }}" }
-          wait: false
+          wait_workflow: false
 
       - name: Print Docker build workflow result
         if: always()

@@ -70,7 +70,6 @@ jobs:
             ${{ env.IMAGE_NAME }}:${GITHUB_REF#refs/tags/}
           cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:latest
           cache-to: type=inline
-          progress: plain
 
       - name: Save digest
         run: |
@@ -92,5 +91,3 @@ jobs:
           ref: ${{ github.ref }}
           client_payload: |
             { "tag": "${{ github.ref_name }}" }
-          wait: true
-

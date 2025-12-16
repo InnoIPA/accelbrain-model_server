@@ -1,0 +1,83 @@
+name: Merge Docker Manifest
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker tag to merge (e.g. v1.2.3)'
+        required: true
+        type: string
+
+  repository_dispatch:
+    types: [merge-manifest]
+
+env:
+  IMAGE_NAME: innodiskorg/ollama
+
+jobs:
+  merge:
+    runs-on: self-hosted
+    environment: release
+
+    steps:
+      - name: Resolve tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG=$(echo '${{ github.event.client_payload }}' | jq -r '.tag')
+          fi
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "Tag is missing"
+            exit 1
+          fi
+
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "Merging manifest for tag: $TAG"
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+
+      # 🔹 merge 本身（idempotent）
+      - name: Merge manifest (idempotent)
+        run: |
+          docker buildx imagetools create \
+            -t ${IMAGE_NAME}:${TAG} \
+            ${IMAGE_NAME}:${TAG}
+
+      # 🔹 檢查目前有哪些架構
+      - name: Detect architectures
+        id: arch
+        run: |
+          ARCHS=$(docker buildx imagetools inspect ${IMAGE_NAME}:${TAG} \
+            --format '{{ range .Manifest.Manifests }}{{ .Platform.Architecture }} {{ end }}')
+
+          echo "Detected architectures: $ARCHS"
+          echo "ARCHS=$ARCHS" >> $GITHUB_ENV
+
+      # 🔹 gate：必須同時有 amd64 + arm64
+      - name: Check multi-arch completeness
+        run: |
+          if [[ "$ARCHS" != *"amd64"* || "$ARCHS" != *"arm64"* ]]; then
+            echo "❌ Not all required architectures are present."
+            echo "Skip update-latest."
+            exit 0
+          fi
+
+          echo "✅ Multi-arch complete."
+
+      # 🔹 只有在完整時才 promotion
+      - name: Trigger update-latest
+        uses: convictional/trigger-workflow-and-wait@v1.6.4
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          workflow_file_name: update-latest.yml
+          client_payload: |
+            { "tag": "${{ env.TAG }}" }
+          wait: false

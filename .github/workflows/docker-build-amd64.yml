@@ -1,0 +1,77 @@
+name: Build Docker amd64
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CGO_CFLAGS: '-O3'
+  CGO_CXXFLAGS: '-O3'
+  IMAGE_NAME: innodiskorg/ollama
+
+jobs:
+  setup-environment:
+    runs-on: self-hosted
+    environment: release
+    outputs:
+      GOFLAGS: ${{ steps.goflags.outputs.GOFLAGS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set environment
+        id: goflags
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION_NO_V="${VERSION#v}"
+          echo "GOFLAGS='-ldflags=-w -s \"-X=github.com/InnoIPA/accelbrain-model_server/version.Version=${VERSION_NO_V}\" \"-X=github.com/InnoIPA/accelbrain-model_server/server.mode=release\"'" >> "$GITHUB_OUTPUT"
+      
+
+  docker-build-amd64:
+    runs-on: [self-hosted, X64]
+    environment: release
+    needs: setup-environment
+    env:
+      DOCKER_BUILDKIT: 1 
+      GOFLAGS: ${{ needs.setup-environment.outputs.GOFLAGS }}
+      
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: 
+            network=host
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+
+      - name: Build and Push Docker Image (amd64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: |
+            CGO_CFLAGS
+            CGO_CXXFLAGS
+            GOFLAGS
+          outputs: |
+            type=image,
+            name=${{ env.IMAGE_NAME }},
+            push-by-digest=true,
+            name-canonical=true,
+            push=true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${GITHUB_REF#refs/tags/}
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:latest
+          cache-to: type=inline
+          progress: plain
+
+      - name: Save digest
+        run: |
+          echo "${{ steps.build.outputs.digest }}" > ${{ runner.temp }}/linux-amd64.txt

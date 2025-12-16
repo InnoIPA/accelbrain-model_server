@@ -1,0 +1,53 @@
+name: Update Docker Latest Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to promote (e.g. v1.2.3)'
+        required: true
+        type: string
+
+  repository_dispatch:
+    types: [update-latest]
+
+env:
+  IMAGE_NAME: innodiskorg/ollama
+
+jobs:
+  promote:
+    runs-on: self-hosted
+    environment: release
+
+    steps:
+      - name: Resolve tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG=$(echo '${{ github.event.client_payload }}' | jq -r '.tag')
+          fi
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "Tag is missing"
+            exit 1
+          fi
+
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "Promoting ${IMAGE_NAME}:${TAG} → latest"
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+
+      - name: Promote to latest
+        run: |
+          docker buildx imagetools create \
+            -t ${IMAGE_NAME}:latest \
+            ${IMAGE_NAME}:${TAG}
+
+      - name: Inspect latest
+        run: |
+          docker buildx imagetools inspect ${IMAGE_NAME}:latest

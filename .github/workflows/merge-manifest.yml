@@ -61,17 +61,20 @@ jobs:
 
       # 🔹 gate：必須同時有 amd64 + arm64
       - name: Check multi-arch completeness
+        id: check_multiarch
         run: |
-          if [[ "$ARCHS" != *"amd64"* || "$ARCHS" != *"arm64"* ]]; then
+          if [[ "$ARCHS" == *"amd64"* && "$ARCHS" == *"arm64"* ]]; then
+            echo "✅ All required architectures are present."
+            echo "COMPLETENESS=COMPLETE" >> $GITHUB_OUTPUT
+          else
             echo "❌ Not all required architectures are present."
             echo "Skip update-latest."
-            exit 0
+            echo "COMPLETENESS=INCOMPLETE" >> $GITHUB_OUTPUT
           fi
-
-          echo "✅ Multi-arch complete."
 
       # 🔹 只有在完整時才 promotion
       - name: Trigger update-latest
+        if: steps.check_multiarch.outputs.COMPLETENESS == 'COMPLETE'
         uses: convictional/trigger-workflow-and-wait@v1.6.4
         with:
           owner: ${{ github.repository_owner }}
